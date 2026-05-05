@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
 import requests
 import os
 from dotenv import load_dotenv
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -12,14 +14,19 @@ ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 
 # ==============================
-# 🔹 HOME ROUTE
+# 📁 SERVIR FICHIERS AUDIO
+# ==============================
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ==============================
+# 🏠 HOME
 # ==============================
 @app.get("/")
 def home():
     return {"message": "Serveur OK"}
 
 # ==============================
-# 🔹 VERIFICATION WEBHOOK (GET)
+# 🔹 WEBHOOK VERIFICATION
 # ==============================
 @app.get("/webhook")
 async def verify_webhook(request: Request):
@@ -29,28 +36,33 @@ async def verify_webhook(request: Request):
     token = params.get("hub.verify_token")
     challenge = params.get("hub.challenge")
 
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        print("✅ Webhook vérifié")
-        return int(challenge)
+    print("MODE:", mode)
+    print("TOKEN reçu:", token)
+    print("TOKEN attendu:", VERIFY_TOKEN)
+    print("CHALLENGE:", challenge)
 
-    print("❌ Vérification échouée")
-    return {"error": "Verification failed"}
+    if mode == "subscribe" and token == VERIFY_TOKEN:
+        return PlainTextResponse(content=challenge)
+
+    return PlainTextResponse(content="Verification failed")
 
 # ==============================
-# 🔹 RECEPTION MESSAGE (POST)
+# 🔹 RECEPTION MESSAGE
 # ==============================
 @app.post("/webhook")
 async def receive_message(request: Request):
     data = await request.json()
 
-    print("📩 Message reçu :")
-    print(data)
+    print("📩 Message reçu :", data)
 
     try:
         message = data["entry"][0]["changes"][0]["value"]["messages"][0]
         sender = message["from"]
 
-        send_message(sender, "test OK ✅")
+        # 🔊 URL de ton audio
+        audio_url = "https://communication-fast-api.onrender.com/static/test-ok.mp3"
+
+        send_audio(sender, audio_url)
 
     except Exception as e:
         print("⚠️ Erreur :", e)
@@ -58,9 +70,9 @@ async def receive_message(request: Request):
     return {"status": "ok"}
 
 # ==============================
-# 🔹 ENVOI MESSAGE WHATSAPP
+# 🔊 ENVOI AUDIO WHATSAPP
 # ==============================
-def send_message(to, text):
+def send_audio(to, audio_url):
     url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
 
     headers = {
@@ -71,13 +83,13 @@ def send_message(to, text):
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
-        "type": "text",
-        "text": {
-            "body": text
+        "type": "audio",
+        "audio": {
+            "link": audio_url
         }
     }
 
     response = requests.post(url, headers=headers, json=payload)
 
-    print("📤 Réponse envoyée :", response.status_code)
+    print("📤 AUDIO envoyé :", response.status_code)
     print(response.text)
